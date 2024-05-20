@@ -1,4 +1,4 @@
-module github.com/khandelwalsahil
+module github.com/khandelwalsahil/scaler-operator
 
 go 1.21
 
