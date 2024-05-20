@@ -61,6 +61,12 @@ spec:
             type: object
           status:
             description: ScalerStatus defines the observed state of Scaler
+            properties:
+              status:
+                description: 'INSERT ADDITIONAL STATUS FIELD - define observed state
+                  of cluster Important: Run "make" to regenerate code after modifying
+                  this file'
+                type: string
             type: object
         type: object
     served: true
