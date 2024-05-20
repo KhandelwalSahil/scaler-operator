@@ -1,0 +1,11 @@
+apiVersion: api.sahil.com/v1alpha1
+kind: Scaler
+metadata:
+  name: scaler-sample
+spec:
+  start: 5
+  end: 10
+  replicas: 5
+  deployments:
+    - name: abc
+      namespace: default
