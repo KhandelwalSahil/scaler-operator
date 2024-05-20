@@ -39,6 +39,7 @@ type ScalerReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 }
+
 //+kubebuilder:rbac:groups=api.my.domain,resources=scalers,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=api.my.domain,resources=scalers/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=api.my.domain,resources=scalers/finalizers,verbs=update

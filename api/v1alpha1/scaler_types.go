@@ -41,7 +41,7 @@ type NamespacedName struct {
 
 const (
 	SUCCESS = "Success"
-	FAILED = "Failed"
+	FAILED  = "Failed"
 )
 
 // ScalerStatus defines the observed state of Scaler

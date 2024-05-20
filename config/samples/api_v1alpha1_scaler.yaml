@@ -4,8 +4,8 @@ metadata:
   name: scaler-sample
 spec:
   start: 5
-  end: 10
+  end: 12
   replicas: 5
   deployments:
-    - name: abc
+    - name: nginx-deployment
       namespace: default
