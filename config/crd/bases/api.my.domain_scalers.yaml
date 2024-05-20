@@ -4,9 +4,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.13.0
-  name: scalers.api.my.domain
+  name: scalers.api.sahil.com
 spec:
-  group: api.my.domain
+  group: api.sahil.com
   names:
     kind: Scaler
     listKind: ScalerList
