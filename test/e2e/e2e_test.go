@@ -24,7 +24,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/khandelwalsahil/test/utils"
+	"github.com/khandelwalsahil/scaler-operator/test/utils"
 )
 
 const namespace = "scaler-operator-system"
