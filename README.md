@@ -1,5 +1,5 @@
 # scaler-operator
-A sample operator which can scale pods based on time window, which can be useful to manage peek traffic cycles.
+A sample operator which can scale pods based on time window which can be useful to manage peek traffic cycles.
 
 ## Description
 There are 3 main components for any operator to work:
