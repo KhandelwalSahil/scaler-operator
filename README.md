@@ -1,91 +1,186 @@
 # scaler-operator
-// TODO(user): Add simple overview of use/purpose
+A sample operator which can scale pods based on time window, which can be useful to manage peek traffic cycles.
 
 ## Description
-// TODO(user): An in-depth paragraph about your project and overview of use
-
-## Getting Started
+There are 3 main components for any operator to work:
+1. Custom Resource Definition (CRDs): Used to extend kubernetes with new behavior or functionalities
+2. Custom Resource (CRs): A custom resource is an extension of the Kubernetes API that is not necessarily available in a default Kubernetes installation. It represents a customization of a particular Kubernetes installation.
+3. Controller: Controller will observe your objects, analyze the changes compared to the cluster's current state, and apply actions that transition the cluster into the new desired state.
 
 ### Prerequisites
-- go version v1.20.0+
-- docker version 17.03+.
-- kubectl version v1.11.3+.
-- Access to a Kubernetes v1.11.3+ cluster.
+- go
+- docker
+- Minikube or Kind (or any other kubernetes env)
+- kubectl
+- Operator-Framework (Operator-SDK) (Installation Steps: https://sdk.operatorframework.io/docs/installation/)
 
-### To Deploy on the cluster
-**Build and push your image to the location specified by `IMG`:**
+### Steps to follow:
 
+**Create scaler-operator directory and go inside it**
 ```sh
-make docker-build docker-push IMG=<some-registry>/scaler-operator:tag
+mkdir scaler-operator && cd scaler-operator
 ```
 
-**NOTE:** This image ought to be published in the personal registry you specified. 
-And it is required to have access to pull the image from the working environment. 
-Make sure you have the proper permission to the registry if the above commands don’t work.
-
-**Install the CRDs into the cluster:**
-
+**Initializing Operator Template Code using Operator-SDK**
 ```sh
-make install
+operator-sdk init --plugins go/v4 --owner "sahil khandelwal" --repo github.com/khandelwalsahil/scaler-operator
 ```
 
-**Deploy the Manager to the cluster with the image specified by `IMG`:**
-
+**Creating API for kind Scaler**
 ```sh
-make deploy IMG=<some-registry>/scaler-operator:tag
+operator-sdk create api --kind Scaler --group api --version v1alpha1
+```
+**Give y for Create Resource and Controller**
+Resource/API: Path where we will define our custom resource object
+Controller: Path where we will write our logic to interact with these objects for reconciliation
+
+**Create template for CRD file**
+```sh
+make manifests
 ```
 
-> **NOTE**: If you encounter RBAC errors, you may need to grant yourself cluster-admin 
-privileges or be logged in as admin.
+**Paths for few important files to work on**
+1. CRD: config/crd/bases/
+2. CR: config/samples/
+3. Controller: internal/controller/scaler_controller.go
+4. API Object: api/v1alpha1/scaler_types.go
 
-**Create instances of your solution**
-You can apply the samples (examples) from the config/sample:
-
+**Defining Custom Resource**
 ```sh
-kubectl apply -k config/samples/
+apiVersion: api.my.domain/v1alpha1
+kind: Scaler
+metadata:
+  labels:
+    app.kubernetes.io/name: scaler
+    app.kubernetes.io/instance: scaler-sample
+    app.kubernetes.io/part-of: scaler-operator
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: scaler-operator
+  name: scaler-sample
+spec:
+  start: 5
+  end: 10
+  replicas: 5
+  deployments:
+    - name: abc
+      namespace: default
 ```
 
->**NOTE**: Ensure that the samples has default values to test it out.
-
-### To Uninstall
-**Delete the instances (CRs) from the cluster:**
-
+**Defining API Object (As per above CR, add fields under spec)"**
 ```sh
-kubectl delete -k config/samples/
+type ScalerSpec struct {
+	
+	Start      int              `json:"start"`
+	End        int              `json:"end"`
+	Replicas   int32            `json:"replicas"`
+	Deployment []NameSpacedName `json:"deployments"`
+}
+
+type NameSpacedName struct {
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
+}
 ```
 
-**Delete the APIs(CRDs) from the cluster:**
-
+**Create CRD (config/crd/bases/api.my.domain_scalers.yaml)**
 ```sh
-make uninstall
+make Manifests
 ```
 
-**UnDeploy the controller from the cluster:**
-
+**Write Reconcile Logic for Controller**
 ```sh
-make undeploy
+func (r *ScalerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	log := logger.WithValues("Request.Namespace", req.Namespace, "Request.Name", req.Name)
+
+	log.Info("Reconcile called")
+	scaler := &apiv1alpha1.Scaler{}
+
+	err := r.Get(ctx, req.NamespacedName, scaler)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			log.Info("Scaler resource not found. Ignoring since object must be deleted.")
+			return ctrl.Result{}, nil
+		}
+		log.Error(err, "Failed")
+		return ctrl.Result{}, err
+	}
+
+	startTime := scaler.Spec.Start
+	endTime := scaler.Spec.End
+
+	// current time in UTC
+	currentHour := time.Now().UTC().Hour()
+	log.Info(fmt.Sprintf("current time in hour : %d\n", currentHour))
+
+	if currentHour >= startTime && currentHour <= endTime {
+
+		if err = scaleDeployment(scaler, r, ctx, int32(scaler.Spec.Replicas)); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+
+	return ctrl.Result{RequeueAfter: time.Duration(30 * time.Second)}, nil
+}
+
+func scaleDeployment(scaler *apiv1alpha1.Scaler, r *ScalerReconciler, ctx context.Context, replicas int32) error {
+	for _, deploy := range scaler.Spec.Deployment {
+		dep := &v1.Deployment{}
+		err := r.Get(ctx, types.NamespacedName{
+			Namespace: deploy.Namespace,
+			Name:      deploy.Name,
+		}, dep)
+		if err != nil {
+			return err
+		}
+
+		if dep.Spec.Replicas != &replicas {
+			dep.Spec.Replicas = &replicas
+			err := r.Update(ctx, dep)
+			if err != nil {
+				scaler.Status.Status = apiv1alpha1.FAILED
+				return err
+			}
+			scaler.Status.Status = apiv1alpha1.SUCCESS
+			err = r.Status().Update(ctx, scaler)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
 ```
 
-## Contributing
-// TODO(user): Add detailed information on how you would like others to contribute to this project
+**Now we can start our cluster and execute our changes**
 
-**NOTE:** Run `make help` for more information on all potential `make` targets
+**Start Cluster (I am using minikube)**
+```sh
+minikube start
+```
 
-More information can be found via the [Kubebuilder Documentation](https://book.kubebuilder.io/introduction.html)
+**Apply CRD**
+```sh
+kubectl apply -f config/crd/bases/api.my.domain_scalers.yaml
+```
 
-## License
+**Deploy nginx (It will start 2 pods)**
+```sh
+ kubectl apply -f https://k8s.io/examples/application/deployment.yaml
+```
 
-Copyright 2024 sahil khandelwal.
+**Start Operator**
+```sh
+make run
+```
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
+**Apply CR to scale pods to 5**
+```sh
+kubectl apply -f config/samples/api_v1alpha1_scaler.yaml
+```
 
-    http://www.apache.org/licenses/LICENSE-2.0
+It should return 5 pods
+```sh
+kubectl get pods
+```
 
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-
+**This was the sample operator to just get acquainted with the operator, CR and CRDs and related concepts**
